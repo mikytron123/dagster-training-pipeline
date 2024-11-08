@@ -1,0 +1,12 @@
+dagster
+dagster-docker
+dagster-postgres
+pandas
+pyarrow
+scikit-learn
+minio
+mlflow-skinny
+joblib
+matplotlib
+optuna
+scipy

@@ -1,0 +1,150 @@
+services:
+  postgres:
+    networks:
+      - docker_network
+    container_name: postgres
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_pass
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+      - ./postgres/entrypoint.sh:/docker-entrypoint-initdb.d/init-db.sh
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  rabbitmq:
+    networks:
+      - docker_network
+    build: ./rabbitmq
+    # image: rabbitmq:latest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    environment:
+      RABBITMQ_DEFAULT_USER: rabbitmq
+      RABBITMQ_DEFAULT_PASS: rabbitmq
+    ports:
+    - 5672:5672
+    - 15672:15672
+
+  dagster_webserver:
+    networks:
+      - docker_network
+    env_file: .env
+    build: ./dagster
+    entrypoint:
+      - dagster-webserver
+      - -h
+      - "0.0.0.0"
+      - -p
+      - "3000"
+      - -w
+      - workspace.yaml
+    ports:
+      - "3000:3000"
+    environment:
+      DAGSTER_POSTGRES_USER: "dagster_user"
+      DAGSTER_POSTGRES_PASSWORD: "dagster_pass"
+      DAGSTER_POSTGRES_DB: "dagster"
+      DAGSTER_POSTGRES_HOST: "postgres"
+    volumes: # Make docker client accessible so we can terminate containers from the webserver
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/io_manager_storage:/tmp/io_manager_storage
+    depends_on:
+      - postgres
+      - docker_user_code
+
+  docker_daemon:
+    networks:
+      - docker_network
+    env_file: .env
+    build: ./dagster
+    entrypoint:
+      - dagster-daemon
+      - run
+    # restart: on-failure
+    environment:
+      DAGSTER_POSTGRES_USER: "dagster_user"
+      DAGSTER_POSTGRES_PASSWORD: "dagster_pass"
+      DAGSTER_POSTGRES_DB: "dagster"
+      DAGSTER_POSTGRES_HOST: "postgres"
+    volumes: # Make docker client accessible so we can launch containers using host docker
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/io_manager_storage:/tmp/io_manager_storage
+    depends_on:
+      - postgres
+      - docker_user_code
+
+  docker_user_code:
+    networks:
+      - docker_network
+    depends_on:
+      - minio
+      - mlflow
+      - postgres
+    env_file: .env
+    build: ./training_pipeline
+    container_name: docker_user_code
+    image: docker_user_code_image
+    environment:
+      DAGSTER_POSTGRES_USER: "dagster_user"
+      DAGSTER_POSTGRES_PASSWORD: "dagster_pass"
+      DAGSTER_POSTGRES_DB: "dagster"
+      DAGSTER_POSTGRES_HOST: "postgres"
+      DAGSTER_CURRENT_IMAGE: "docker_user_code_image"
+
+  
+  minio:
+    networks:
+      - docker_network
+    build: ./minio
+    ports:
+        - ${MINIO_PORT}:${MINIO_PORT}
+        - 9001:9001
+    container_name: minio1
+    env_file:
+      - .env
+    volumes:
+        - minio_data:/data
+  
+  mlflow:
+    networks:
+      - docker_network
+    build: ./mlflow
+    # image: ghcr.io/mlflow/mlflow:v2.17.1
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    ports:
+      - "5000:5000"
+    environment:
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
+      - MLFLOW_S3_ENDPOINT_URL=http://${MINIO_HOST}:${MINIO_PORT}
+      - MLFLOW_S3_IGNORE_TLS=true
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://mlflow_user:mlflow_pass@postgres/mlflow
+      --host 0.0.0.0
+      --serve-artifacts
+      --artifacts-destination s3://mlflow
+
+volumes:
+  postgres-db-volume:
+  minio_data:
+
+networks:
+  docker_network:
+    name: docker_network
