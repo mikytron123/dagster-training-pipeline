@@ -12,10 +12,10 @@ RUN mkdir -p $DAGSTER_HOME
 
 COPY requirements.txt .
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-     --mount=type=bind,source=requirements.txt,target=requirements.txt \
-     python -m pip install -r requirements.txt
-
 COPY dagster.yaml workspace.yaml $DAGSTER_HOME
 
 WORKDIR $DAGSTER_HOME
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+     --mount=type=bind,source=requirements.txt,target=requirements.txt \
+     python -m pip install -r requirements.txt

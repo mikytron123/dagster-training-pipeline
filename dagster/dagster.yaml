@@ -26,6 +26,12 @@ run_launcher:
       - MINIO_BUCKET
       - MINIO_HOST
       - MINIO_PORT
+      - MLFLOW_HOST
+      - MLFLOW_PORT
+      - PYTHONDONTWRITEBYTECODE
+      - PYTHONUNBUFFERED
+      - GIT_PYTHON_REFRESH
+      - MPLCONFIGDIR
     network: docker_network
     container_kwargs:
       volumes: # Make docker client accessible to any launched containers as well

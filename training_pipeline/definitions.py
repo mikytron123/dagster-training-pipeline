@@ -1,5 +1,4 @@
-from dagster import Definitions
-import os
+from dagster import Definitions,EnvVar
 
 from assets import (
     train_model_pipeline,
@@ -7,28 +6,22 @@ from assets import (
     preprocess,
     train_test_splitter,
     decision_tree,
-    svm
+    svm,
+    svm_optuna
 )
 from resources.minio_resource import MinioResource
 from resources.minio_parquet_io_manager import MinioParquetIOManager
 
 
-ACCESS_KEY = os.getenv("MINIO_ROOT_USER")
-SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD")
-MINIO_HOST = os.getenv("MINIO_HOST", default="localhost")
-MINIO_PORT = os.getenv("MINIO_PORT")
-BUCKET = os.getenv("MINIO_BUCKET")
-
-
 minio_resource = MinioResource(
-    minio_host=MINIO_HOST,
-    minio_port=MINIO_PORT,
-    access_key=ACCESS_KEY,
-    secret_key=SECRET_KEY,
-    bucket=BUCKET,
+    minio_host=EnvVar("MINIO_HOST"),
+    minio_port=EnvVar("MINIO_PORT"),
+    access_key=EnvVar("MINIO_ROOT_USER"),
+    secret_key=EnvVar("MINIO_ROOT_PASSWORD"),
+    bucket=EnvVar("MINIO_BUCKET"),
 )
 
-io_manager = MinioParquetIOManager(minio_resource=minio_resource, minio_bucket=BUCKET)
+io_manager = MinioParquetIOManager(minio_resource=minio_resource, minio_bucket=EnvVar("MINIO_BUCKET"))
 
 defs = Definitions(
     assets=[
@@ -36,7 +29,8 @@ defs = Definitions(
         preprocess,
         train_test_splitter,
         decision_tree,
-        svm
+        svm,
+        svm_optuna
     ],
     jobs=[train_model_pipeline],
     resources={"io_manager": io_manager},
