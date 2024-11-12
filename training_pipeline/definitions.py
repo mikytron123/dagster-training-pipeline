@@ -1,13 +1,12 @@
-from dagster import Definitions,EnvVar
+from dagster import Definitions, EnvVar
 
 from assets import (
+    decision_tree_optuna,
     train_model_pipeline,
     load_data,
     preprocess,
     train_test_splitter,
-    decision_tree,
-    svm,
-    svm_optuna
+    svm_optuna,
 )
 from resources.minio_resource import MinioResource
 from resources.minio_parquet_io_manager import MinioParquetIOManager
@@ -21,16 +20,15 @@ minio_resource = MinioResource(
     bucket=EnvVar("MINIO_BUCKET"),
 )
 
-io_manager = MinioParquetIOManager(minio_resource=minio_resource, minio_bucket=EnvVar("MINIO_BUCKET"))
+io_manager = MinioParquetIOManager(minio_resource=minio_resource)
 
 defs = Definitions(
     assets=[
         load_data,
         preprocess,
         train_test_splitter,
-        decision_tree,
-        svm,
-        svm_optuna
+        svm_optuna,
+        decision_tree_optuna,
     ],
     jobs=[train_model_pipeline],
     resources={"io_manager": io_manager},

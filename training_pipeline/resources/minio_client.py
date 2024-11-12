@@ -1,11 +1,11 @@
 from typing import Literal
 from minio import Minio
 import pandas as pd
-import os
 from io import BytesIO
 import pathlib
 from minio.datatypes import Object
 from dataclasses import dataclass
+
 
 @dataclass()
 class MinioClient:
@@ -13,7 +13,7 @@ class MinioClient:
     minio_port: str
     access_key: str
     secret_key: str
-    bucket:str
+    bucket: str
 
     def __post_init__(
         self,
@@ -59,8 +59,11 @@ class MinioClient:
             stat = self.client.stat_object(
                 bucket_name=self.bucket, object_name=object_name
             )
+            length = stat.size
+            if length is None:
+                raise Exception("object size is None")
             response = self.client.get_object(
-                bucket_name=self.bucket, object_name=object_name, length=stat.size
+                bucket_name=self.bucket, object_name=object_name, length=length
             )
             if object_type == "dataframe":
                 return response.data

@@ -16,16 +16,22 @@ from .minio_client import MinioClient
 
 
 class InnerIOManager(IOManager):
-    def __init__(self, minio_client: MinioClient, minio_bucket: str):
+    def __init__(self, minio_client: MinioClient):
         self.minio_client = minio_client
-        self.minio_bucket = minio_bucket
 
     def _get_asset_path(self, context: InputContext | OutputContext) -> str:
         return context.asset_key.path[-1]
 
     def load_input(self, context: InputContext) -> Any:
-        minio_object = self.minio_client.find_object(str(self._get_asset_path(context)))
+        minio_object = self.minio_client.find_object((self._get_asset_path(context)))
+        if minio_object is None:
+            raise Exception("object not found")
+
         object_name = minio_object.object_name
+
+        if object_name is None:
+            raise Exception("object name is None")
+
         if object_name.endswith("json"):
             return self.minio_client.read_object(
                 object_name=object_name, object_type="json"
@@ -33,7 +39,9 @@ class InnerIOManager(IOManager):
         elif object_name.endswith("parquet"):
             return self.minio_client.read_dataframe(object_name=object_name)
 
-    def handle_output(self, context: OutputContext, obj: Union[dict, pd.DataFrame]):
+    def handle_output(
+        self, context: OutputContext, obj: Union[dict, pd.DataFrame, None]
+    ):
         if isinstance(obj, dict):
             # save as json
             obj_name = f"{self._get_asset_path(context)}.json"
@@ -62,17 +70,15 @@ class InnerIOManager(IOManager):
 
 class MinioParquetIOManager(ConfigurableIOManager):
     minio_resource: ResourceDependency[MinioResource]
-    minio_bucket: str
 
     @cached_method
     def inner_io_manager(self) -> InnerIOManager:
-        return InnerIOManager(
-            minio_client=self.minio_resource.get_client(),
-            minio_bucket=self.minio_bucket,
-        )
+        return InnerIOManager(minio_client=self.minio_resource.get_client())
 
     def load_input(self, context: InputContext) -> Any:
         return self.inner_io_manager().load_input(context)
 
-    def handle_output(self, context: OutputContext, obj: Union[dict, pd.DataFrame]):
+    def handle_output(
+        self, context: OutputContext, obj: Union[dict, pd.DataFrame, None]
+    ):
         self.inner_io_manager().handle_output(context, obj)
