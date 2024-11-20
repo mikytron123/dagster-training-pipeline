@@ -5,7 +5,6 @@ from sklearn.preprocessing import LabelBinarizer
 from sklearn.datasets import fetch_openml
 import mlflow
 import optuna
-import optunahub
 from models.objective import DecisionTreeObjective, SVCObjective
 
 from models.utils import score_models
@@ -114,7 +113,6 @@ def svm_optuna(
     data_type: dict[str, list[str]],
 ):
     setup_mlflow()
-    module = optunahub.load_module(package="samplers/auto_sampler")
     y_test_vec = y_test[y_test.columns[0]].to_numpy()
     y_train_vec = y_train[y_train.columns[0]].to_numpy()
     mlflow.sklearn.autolog(disable=True)
@@ -124,7 +122,7 @@ def svm_optuna(
             url="postgresql://optuna_user:optuna_pass@postgres/optuna"
         )
         study = optuna.create_study(
-            storage=storage, direction="maximize", sampler=module.AutoSampler()
+            storage=storage, direction="maximize"
         )
 
         # Execute the hyperparameter optimization trials.
@@ -171,7 +169,6 @@ def decision_tree_optuna(
     data_type: dict[str, list[str]],
 ):
     setup_mlflow()
-    module = optunahub.load_module(package="samplers/auto_sampler")
     mlflow.sklearn.autolog(disable=True)
     y_test_vec = y_test[y_test.columns[0]].to_numpy()
     y_train_vec = y_train[y_train.columns[0]].to_numpy()
@@ -181,7 +178,7 @@ def decision_tree_optuna(
             url="postgresql://optuna_user:optuna_pass@postgres/optuna"
         )
         study = optuna.create_study(
-            storage=storage, direction="maximize", sampler=module.AutoSampler()
+            storage=storage, direction="maximize"
         )
 
         # Execute the hyperparameter optimization trials.
@@ -193,7 +190,7 @@ def decision_tree_optuna(
             y_test=y_test_vec,
             data_type=data_type,
         )
-        study.optimize(objective, timeout=60 * 5, show_progress_bar=True)
+        study.optimize(objective, timeout=60 * 2, show_progress_bar=True)
 
         mlflow.log_metric("best_balanced_score", study.best_value)
         mlflow.sklearn.autolog(disable=False, log_datasets=False)
@@ -210,6 +207,18 @@ def decision_tree_optuna(
         mlflow.log_metric(key="test_recall_score", value=mod_recall_score)
         mlflow.log_metric(key="test_balanced_accuracy_score", value=mod_accuracy_score)
 
+@asset(deps=[svm_optuna,decision_tree_optuna])
+def register_best_model():
+    setup_mlflow()
+    runs = mlflow.search_runs(experiment_names=["Training"],filter_string="metrics.test_f1_score > 0")
+    runs = runs.sort_values(["metrics.test_balanced_accuracy_score"],ascending=False)
+    best_artifact_uri = runs.iloc[0,runs.columns.get_loc("artifact_uri")]
+    best_run_id = runs.iloc[0,runs.columns.get_loc("run_id")]
+    model_uri = f"runs:/{best_run_id}{best_artifact_uri.split(best_run_id)[-1]}"
+    mlflow.register_model(model_uri=model_uri,name="best_model")
+
+    
+
 
 train_model_pipeline = define_asset_job(
     name="train_model_pipeline",
@@ -219,5 +228,6 @@ train_model_pipeline = define_asset_job(
         train_test_splitter,
         svm_optuna,
         decision_tree_optuna,
+        register_best_model
     ],
 )

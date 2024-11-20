@@ -7,6 +7,7 @@ from assets import (
     preprocess,
     train_test_splitter,
     svm_optuna,
+    register_best_model
 )
 from resources.minio_resource import MinioResource
 from resources.minio_parquet_io_manager import MinioParquetIOManager
@@ -29,6 +30,7 @@ defs = Definitions(
         train_test_splitter,
         svm_optuna,
         decision_tree_optuna,
+        register_best_model
     ],
     jobs=[train_model_pipeline],
     resources={"io_manager": io_manager},

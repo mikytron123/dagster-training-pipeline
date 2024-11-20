@@ -1,4 +1,6 @@
 dagster
+dagster-postgres
+dagster-docker
 pandas
 pyarrow
 scikit-learn
@@ -8,5 +10,3 @@ joblib
 matplotlib
 optuna
 scipy
-optunahub 
-cmaes
