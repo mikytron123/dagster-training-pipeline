@@ -37,7 +37,7 @@ ML model training pipeline using dagster and mlflow
 This project is a machine learning training pipeline that is orchestrated using Dagster. A postgres database and minio instance is used for storage. MLFlow is used for experiment tracking of different machine learning models.
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-
+![Diagram](images/Job_train_model_pipeline_final.svg)
 
 ### Built With
 
