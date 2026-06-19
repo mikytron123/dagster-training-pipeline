@@ -1,0 +1,10 @@
+isort
+pyupgrade
+autoflake
+flake8
+black
+flake8-bugbear
+flake8-comprehensions
+flake8_simplify
+pycodestyle
+pyflakes
