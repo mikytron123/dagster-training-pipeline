@@ -140,8 +140,11 @@ def svm_optuna(
 
         run_id = run.info.run_id
         exp = mlflow.get_experiment_by_name("Training")
-        cur_model = mlflow.search_logged_models(experiment_ids=[exp.experiment_id],
-            filter_string=f"source_run_id = '{run_id}'",output_format="list")
+        cur_model = mlflow.search_logged_models(
+            experiment_ids=[exp.experiment_id],
+            filter_string=f"source_run_id = '{run_id}'",
+            output_format="list",
+        )
         model_id = cur_model[0].model_id
         mlflow.set_active_model(model_id=model_id)
 
@@ -197,8 +200,11 @@ def decision_tree_optuna(
 
         run_id = run.info.run_id
         exp = mlflow.get_experiment_by_name("Training")
-        cur_model = mlflow.search_logged_models(experiment_ids=[exp.experiment_id],
-            filter_string=f"source_run_id = '{run_id}'",output_format="list")
+        cur_model = mlflow.search_logged_models(
+            experiment_ids=[exp.experiment_id],
+            filter_string=f"source_run_id = '{run_id}'",
+            output_format="list",
+        )
         model_id = cur_model[0].model_id
         mlflow.set_active_model(model_id=model_id)
         # mlflow.sklearn.log_model(model,"model")

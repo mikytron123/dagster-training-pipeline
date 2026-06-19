@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import override, Mapping
 from dataclasses import dataclass
+from typing import Mapping, override
 
 import numpy as np
 import optuna as opt
@@ -36,7 +36,7 @@ class Objective(ABC):
         pipeline.set_params(**params)
 
         kf = StratifiedKFold(n_splits=5)
-        cv:np.typing.NDArray = cross_val_score(
+        cv: np.typing.NDArray = cross_val_score(
             pipeline, self.X_train, self.y_train, scoring="balanced_accuracy", cv=kf
         )
         cv_score = float(np.mean(cv))
@@ -69,6 +69,7 @@ class SVCObjective(Objective):
 
         clf = Pipeline(steps=[("preprocessor", preprocessor), ("classifier", mod)])
         return clf
+
     @override
     def __call__(self, trial: opt.trial.Trial) -> float:
         with mlflow.start_run(nested=True):
@@ -102,11 +103,12 @@ class DecisionTreeObjective(Objective):
                 # ("num", numeric_transformer, numeric_features),
                 ("cat", categorical_transformer, categorical_features),
             ],
-            remainder="passthrough"
+            remainder="passthrough",
         )
 
         clf = Pipeline(steps=[("preprocessor", preprocessor), ("classifier", mod)])
         return clf
+
     @override
     def __call__(self, trial: opt.trial.Trial) -> float:
         with mlflow.start_run(nested=True):
