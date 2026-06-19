@@ -1,15 +1,18 @@
-import pandas as pd
+from abc import ABC, abstractmethod
+from typing import override, Mapping
 from dataclasses import dataclass
-import mlflow
+
+import numpy as np
+import optuna as opt
+import pandas as pd
 from sklearn.compose import ColumnTransformer
+from sklearn.model_selection import StratifiedKFold, cross_val_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.svm import SVC
-import optuna as opt
-from sklearn.model_selection import StratifiedKFold, cross_val_score
-import numpy as np
 from sklearn.tree import DecisionTreeClassifier
-from abc import ABC, abstractmethod
+
+import mlflow
 
 
 @dataclass
@@ -22,28 +25,29 @@ class Objective(ABC):
 
     @abstractmethod
     def create_pipeline(self) -> Pipeline:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def __call__(self, trial: opt.trial.Trial) -> float:
-        pass
+        raise NotImplementedError
 
-    def train_model(self, params: dict) -> float:
+    def train_model(self, params: Mapping[str, int | str | float]) -> float:
         pipeline = self.create_pipeline()
         pipeline.set_params(**params)
 
         kf = StratifiedKFold(n_splits=5)
-        cv = cross_val_score(
+        cv:np.typing.NDArray = cross_val_score(
             pipeline, self.X_train, self.y_train, scoring="balanced_accuracy", cv=kf
         )
-        cv_score = np.mean(cv)
-        mlflow.log_params(params=params)
-        mlflow.log_metric(key="score", value=cv_score)
+        cv_score = float(np.mean(cv))
+        # mlflow.log_params(params=params)
+        _ = mlflow.log_metric(key="score", value=float(cv_score))
         return cv_score
 
 
 @dataclass
 class SVCObjective(Objective):
+    @override
     def create_pipeline(self) -> Pipeline:
         categorical_features = self.data_type["categorical_features"]
         numeric_features = self.data_type["numeric_features"]
@@ -60,13 +64,12 @@ class SVCObjective(Objective):
             transformers=[
                 ("num", numeric_transformer, numeric_features),
                 ("cat", categorical_transformer, categorical_features),
-            ],
-            force_int_remainder_cols=False,
+            ]
         )
 
         clf = Pipeline(steps=[("preprocessor", preprocessor), ("classifier", mod)])
         return clf
-
+    @override
     def __call__(self, trial: opt.trial.Trial) -> float:
         with mlflow.start_run(nested=True):
             # Define hyperparameters
@@ -99,13 +102,12 @@ class DecisionTreeObjective(Objective):
                 # ("num", numeric_transformer, numeric_features),
                 ("cat", categorical_transformer, categorical_features),
             ],
-            remainder="passthrough",
-            force_int_remainder_cols=False,
+            remainder="passthrough"
         )
 
         clf = Pipeline(steps=[("preprocessor", preprocessor), ("classifier", mod)])
         return clf
-
+    @override
     def __call__(self, trial: opt.trial.Trial) -> float:
         with mlflow.start_run(nested=True):
             # Define hyperparameters

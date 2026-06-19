@@ -87,7 +87,7 @@ services:
     networks:
       - docker_network
     depends_on:
-      - minio
+      - rustfs
       - mlflow
       - postgres
     env_file: .env
@@ -101,19 +101,29 @@ services:
       DAGSTER_POSTGRES_HOST: "postgres"
       DAGSTER_CURRENT_IMAGE: "docker_user_code_image"
 
-  
-  minio:
+  rustfs-loader:
+    build: ./rustfs
+    environment:
+      - AWS_ENDPOINT_URL=http://rustfs:9000
+      - RUSTFS_ACCESS_KEY=rustfsadmin
+      - RUSTFS_SECRET_KEY=rustfsadmin
     networks:
       - docker_network
-    build: ./minio
+  rustfs:
     ports:
-        - ${MINIO_PORT}:${MINIO_PORT}
-        - 9001:9001
-    container_name: minio1
-    env_file:
-      - .env
+      - 9000:9000
+      - 9001:9001
     volumes:
-        - minio_data:/data
+      - rustfs_data:/data
+      - rustfs_logs:/logs
+    environment:
+      - RUSTFS_ACCESS_KEY=rustfsadmin
+      - RUSTFS_SECRET_KEY=rustfsadmin
+      - RUSTFS_CONSOLE_ENABLE=true
+
+    image: rustfs/rustfs:latest
+    networks:
+      - docker_network
   
   mlflow:
     networks:
@@ -125,14 +135,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
+      rustfs:
         condition: service_started
     ports:
       - "5000:5000"
     environment:
-      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
-      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
-      - MLFLOW_S3_ENDPOINT_URL=http://${MINIO_HOST}:${MINIO_PORT}
+      - AWS_ACCESS_KEY_ID=${RUSTFS_ACCESS_KEY}
+      - AWS_SECRET_ACCESS_KEY=${RUSTFS_SECRET_KEY}
+      - MLFLOW_S3_ENDPOINT_URL=http://${RUSTFS_HOST}:${RUSTFS_PORT}
       - MLFLOW_S3_IGNORE_TLS=true
     command: >
       mlflow server
@@ -140,10 +150,12 @@ services:
       --host 0.0.0.0
       --serve-artifacts
       --artifacts-destination s3://mlflow
+      --allowed-hosts * 
 
 volumes:
   postgres-db-volume:
-  minio_data:
+  rustfs_data:
+  rustfs_logs:
 
 networks:
   docker_network:

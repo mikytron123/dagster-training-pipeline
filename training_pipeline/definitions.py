@@ -1,27 +1,26 @@
-from dagster import Definitions, EnvVar
-
 from assets import (
     decision_tree_optuna,
-    train_model_pipeline,
     load_data,
     preprocess,
-    train_test_splitter,
+    register_best_model,
     svm_optuna,
-    register_best_model
+    train_model_pipeline,
+    train_test_splitter,
 )
-from resources.minio_resource import MinioResource
-from resources.minio_parquet_io_manager import MinioParquetIOManager
+from resources.s3_parquet_io_manager import S3ParquetIOManager
+from resources.s3_resource import S3Resource
 
+from dagster import Definitions, EnvVar
 
-minio_resource = MinioResource(
-    minio_host=EnvVar("MINIO_HOST"),
-    minio_port=EnvVar("MINIO_PORT"),
-    access_key=EnvVar("MINIO_ROOT_USER"),
-    secret_key=EnvVar("MINIO_ROOT_PASSWORD"),
-    bucket=EnvVar("MINIO_BUCKET"),
+s3_resource = S3Resource(
+    rustfs_host=EnvVar("RUSTFS_HOST"),
+    rustfs_port=EnvVar("RUSTFS_PORT"),
+    rustfs_access_key=EnvVar("RUSTFS_ACCESS_KEY"),
+    rustfs_secret_key=EnvVar("RUSTFS_SECRET_KEY"),
+    bucket=EnvVar("RUSTFS_BUCKET"),
 )
 
-io_manager = MinioParquetIOManager(minio_resource=minio_resource)
+io_manager = S3ParquetIOManager(s3_resource=s3_resource)
 
 defs = Definitions(
     assets=[
@@ -30,7 +29,7 @@ defs = Definitions(
         train_test_splitter,
         svm_optuna,
         decision_tree_optuna,
-        register_best_model
+        register_best_model,
     ],
     jobs=[train_model_pipeline],
     resources={"io_manager": io_manager},

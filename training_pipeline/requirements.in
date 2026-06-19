@@ -4,9 +4,13 @@ dagster-docker
 pandas
 pyarrow
 scikit-learn
-minio
+boto3
 mlflow-skinny
 joblib
 matplotlib
 optuna
 scipy
+numpy
+types-boto3[essential]
+fsspec
+s3fs==2026.4.0

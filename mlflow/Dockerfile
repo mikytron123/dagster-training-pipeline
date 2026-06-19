@@ -1,4 +1,4 @@
-FROM ghcr.io/mlflow/mlflow:v2.17.1
+FROM ghcr.io/mlflow/mlflow:v3.12.0
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1

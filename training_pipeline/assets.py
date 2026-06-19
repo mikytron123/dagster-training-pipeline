@@ -1,13 +1,13 @@
+import optuna
 import pandas as pd
-from dagster import define_asset_job, asset, multi_asset, AssetOut, AssetIn, EnvVar
+from models.objective import DecisionTreeObjective, SVCObjective
+from models.utils import score_models
+from sklearn.datasets import fetch_openml
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelBinarizer
-from sklearn.datasets import fetch_openml
-import mlflow
-import optuna
-from models.objective import DecisionTreeObjective, SVCObjective
 
-from models.utils import score_models
+import mlflow
+from dagster import AssetIn, AssetOut, EnvVar, asset, define_asset_job, multi_asset
 
 MLFLOW_HOST = EnvVar("MLFLOW_HOST").get_value()
 MLFLOW_PORT = EnvVar("MLFLOW_PORT").get_value()
@@ -29,9 +29,9 @@ def load_data() -> tuple[pd.DataFrame, dict]:
     X, y = fetch_openml(data_id=179, return_X_y=True)
     df = pd.concat([X, y], axis="columns")
     print(df.shape)
-    data_type_dict = dict(
-        numeric_features=["fnlwgt"],
-        categorical_features=[
+    data_type_dict = {
+        "numeric_features": ["fnlwgt"],
+        "categorical_features": [
             "age",
             "workclass",
             "education",
@@ -44,7 +44,7 @@ def load_data() -> tuple[pd.DataFrame, dict]:
             "capitalloss",
             "hoursperweek",
         ],
-    )
+    }
 
     return df, data_type_dict
 
@@ -116,17 +116,12 @@ def svm_optuna(
     y_test_vec = y_test[y_test.columns[0]].to_numpy()
     y_train_vec = y_train[y_train.columns[0]].to_numpy()
     mlflow.sklearn.autolog(disable=True)
-    with mlflow.start_run(run_name="svm_optuna", nested=True):
+    with mlflow.start_run(run_name="svm_optuna", nested=True) as run:
         # Initialize the Optuna study
-        storage = optuna.storages.RDBStorage(
-            url="postgresql://optuna_user:optuna_pass@postgres/optuna"
-        )
-        study = optuna.create_study(
-            storage=storage, direction="maximize"
-        )
+
+        study = optuna.create_study(direction="maximize")
 
         # Execute the hyperparameter optimization trials.
-        # Note the addition of the `champion_callback` inclusion to control our logging
         objective = SVCObjective(
             X_train=X_train,
             X_test=X_test,
@@ -142,7 +137,14 @@ def svm_optuna(
         model = objective.create_pipeline()
         model.set_params(**study.best_params)
         model.fit(X_train, y_train)
-        
+
+        run_id = run.info.run_id
+        exp = mlflow.get_experiment_by_name("Training")
+        cur_model = mlflow.search_logged_models(experiment_ids=[exp.experiment_id],
+            filter_string=f"source_run_id = '{run_id}'",output_format="list")
+        model_id = cur_model[0].model_id
+        mlflow.set_active_model(model_id=model_id)
+
         mod_f1_score, mod_precision_score, mod_recall_score, mod_accuracy_score = (
             score_models(model, X_test, y_test_vec)
         )
@@ -172,17 +174,11 @@ def decision_tree_optuna(
     mlflow.sklearn.autolog(disable=True)
     y_test_vec = y_test[y_test.columns[0]].to_numpy()
     y_train_vec = y_train[y_train.columns[0]].to_numpy()
-    with mlflow.start_run(run_name="decision_tree_optuna", nested=True):
+    with mlflow.start_run(run_name="decision_tree_optuna", nested=True) as run:
         # Initialize the Optuna study
-        storage = optuna.storages.RDBStorage(
-            url="postgresql://optuna_user:optuna_pass@postgres/optuna"
-        )
-        study = optuna.create_study(
-            storage=storage, direction="maximize"
-        )
+        study = optuna.create_study(direction="maximize")
 
         # Execute the hyperparameter optimization trials.
-        # Note the addition of the `champion_callback` inclusion to control our logging
         objective = DecisionTreeObjective(
             X_train=X_train,
             X_test=X_test,
@@ -194,30 +190,51 @@ def decision_tree_optuna(
 
         mlflow.log_metric("best_balanced_score", study.best_value)
         mlflow.sklearn.autolog(disable=False, log_datasets=False)
-        
+
         model = objective.create_pipeline()
         model.set_params(**study.best_params)
         model.fit(X_train, y_train)
+
+        run_id = run.info.run_id
+        exp = mlflow.get_experiment_by_name("Training")
+        cur_model = mlflow.search_logged_models(experiment_ids=[exp.experiment_id],
+            filter_string=f"source_run_id = '{run_id}'",output_format="list")
+        model_id = cur_model[0].model_id
+        mlflow.set_active_model(model_id=model_id)
         # mlflow.sklearn.log_model(model,"model")
         mod_f1_score, mod_precision_score, mod_recall_score, mod_accuracy_score = (
             score_models(model, X_test, y_test_vec)
         )
+
         mlflow.log_metric(key="test_f1_score", value=mod_f1_score)
         mlflow.log_metric(key="test_precision_score", value=mod_precision_score)
         mlflow.log_metric(key="test_recall_score", value=mod_recall_score)
         mlflow.log_metric(key="test_balanced_accuracy_score", value=mod_accuracy_score)
 
-@asset(deps=[svm_optuna,decision_tree_optuna])
+
+@asset(deps=[svm_optuna, decision_tree_optuna])
 def register_best_model():
     setup_mlflow()
-    runs = mlflow.search_runs(experiment_names=["Training"],filter_string="metrics.test_f1_score > 0")
-    runs = runs.sort_values(["metrics.test_balanced_accuracy_score"],ascending=False)
-    best_artifact_uri = runs.iloc[0,runs.columns.get_loc("artifact_uri")]
-    best_run_id = runs.iloc[0,runs.columns.get_loc("run_id")]
-    model_uri = f"runs:/{best_run_id}{best_artifact_uri.split(best_run_id)[-1]}"
-    mlflow.register_model(model_uri=model_uri,name="best_model")
-
-    
+    exp = mlflow.get_experiment_by_name("Training")
+    models = mlflow.search_logged_models(
+        experiment_ids=[exp.experiment_id],
+        filter_string="metrics.test_f1_score > 0",
+        order_by=[
+            {"field_name": "metrics.test_balanced_accuracy_score", "ascending": False}
+        ],
+        max_results=1,
+    )
+    best_model_id = models["model_id"].item()
+    model_uri = f"models:/{best_model_id}"
+    mlflow.register_model(model_uri=model_uri, name="best_model")
+    # runs = mlflow.search_runs(
+    #     experiment_names=["Training"], filter_string="metrics.test_f1_score > 0"
+    # )
+    # runs = runs.sort_values(["metrics.test_balanced_accuracy_score"], ascending=False)
+    # best_artifact_uri = runs.iloc[0, runs.columns.get_loc("artifact_uri")]
+    # best_run_id = runs.iloc[0, runs.columns.get_loc("run_id")]
+    # model_uri = f"runs:/{best_run_id}{best_artifact_uri.split(best_run_id)[-1]}"
+    # mlflow.register_model(model_uri=model_uri, name="best_model")
 
 
 train_model_pipeline = define_asset_job(
@@ -228,6 +245,6 @@ train_model_pipeline = define_asset_job(
         train_test_splitter,
         svm_optuna,
         decision_tree_optuna,
-        register_best_model
+        register_best_model,
     ],
 )
