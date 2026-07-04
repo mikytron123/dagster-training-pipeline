@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping, override
+from typing import override
 
 import numpy as np
 import optuna as opt
@@ -87,9 +88,9 @@ class SVCObjective(Objective):
 
 @dataclass
 class DecisionTreeObjective(Objective):
+    @override
     def create_pipeline(self) -> Pipeline:
         categorical_features = self.data_type["categorical_features"]
-        numeric_features = self.data_type["numeric_features"]
 
         categorical_transformer = OneHotEncoder(
             categories="auto", drop=None, handle_unknown="error"
