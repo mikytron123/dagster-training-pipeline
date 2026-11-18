@@ -11,6 +11,11 @@ class S3Resource(ConfigurableResource[S3_Client]):
     bucket: str
 
     def get_client(self) -> S3_Client:
+        """Create an S3 client using this resource's configuration.
+
+        Returns:
+            An S3 client configured for the resource's bucket and endpoint.
+        """
         return S3_Client(
             rustfs_host=self.rustfs_host,
             rustfs_port=self.rustfs_port,

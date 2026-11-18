@@ -19,9 +19,22 @@ from .s3_resource import S3Resource
 
 class InnerIOManager(IOManager):
     def __init__(self, s3_client: S3_Client):
+        """Initialize the IO manager with an S3 client.
+
+        Args:
+            s3_client: Client used to read and write asset objects.
+        """
         self.s3_client: S3_Client = s3_client
 
     def _get_asset_path(self, context: InputContext | OutputContext) -> str:
+        """Get the final component of an asset's key as its object path.
+
+        Args:
+            context: Dagster input or output context for the asset.
+
+        Returns:
+            The final component of the asset key.
+        """
         return context.asset_key.path[-1]
 
     @override
@@ -30,6 +43,15 @@ class InnerIOManager(IOManager):
     ) -> (
         pd.DataFrame | dict | None
     ):  # pyright: ignore[reportMissingTypeArgument,reportUnknownParameterType]
+        """Load an asset from S3 as JSON or Parquet.
+
+        Args:
+            context: Dagster input context identifying the asset.
+
+        Returns:
+            The decoded JSON object, Parquet DataFrame, or ``None`` if the
+            object extension is unsupported.
+        """
         s3_object = self.s3_client.find_object(self._get_asset_path(context))
 
         Key = s3_object["Key"]  # type: ignore
@@ -49,10 +71,19 @@ class InnerIOManager(IOManager):
             dict | pd.DataFrame | None
         ),  # pyright: ignore[reportMissingTypeArgument,reportUnknownParameterType]
     ):
+        """Persist a supported asset object to S3.
+
+        Dictionaries are written as JSON, and DataFrames or Series are written
+        as Parquet. ``None`` is ignored.
+
+        Args:
+            context: Dagster output context identifying the asset.
+            obj: Asset value to persist.
+        """
         if isinstance(obj, dict):
             # save as json
             obj_name = f"{self._get_asset_path(context)}.json"
-            path = str(pathlib.Path().resolve() / obj_name)
+            path = str(pathlib.Path.cwd() / obj_name)
             with open(path, "w") as file:
                 json.dump(obj, file)
 
@@ -78,6 +109,11 @@ class S3ParquetIOManager(ConfigurableIOManager):
 
     @cached_method
     def inner_io_manager(self) -> InnerIOManager:
+        """Create and cache the IO manager backed by the S3 resource.
+
+        Returns:
+            The inner IO manager for this resource.
+        """
         return InnerIOManager(s3_client=self.s3_resource.get_client())
 
     @override
@@ -86,6 +122,14 @@ class S3ParquetIOManager(ConfigurableIOManager):
     ) -> (
         dict | pd.DataFrame | None
     ):  # pyright: ignore[reportMissingTypeArgument,reportUnknownParameterType]
+        """Load an asset through the configured inner IO manager.
+
+        Args:
+            context: Dagster input context identifying the asset.
+
+        Returns:
+            The loaded JSON object, DataFrame, or ``None``.
+        """
         return self.inner_io_manager().load_input(
             context
         )  # pyright: ignore[reportUnknownVariableType,reportUnknownMemberType]
@@ -98,6 +142,12 @@ class S3ParquetIOManager(ConfigurableIOManager):
             dict | pd.DataFrame | None
         ),  # pyright: ignore[reportMissingTypeArgument,reportUnknownParameterType]
     ):
+        """Delegate persistence of an asset to the inner IO manager.
+
+        Args:
+            context: Dagster output context identifying the asset.
+            obj: Asset value to persist.
+        """
         self.inner_io_manager().handle_output(
             context, obj
         )  # pyright: ignore[reportUnknownMemberType]

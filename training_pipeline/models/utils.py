@@ -14,6 +14,16 @@ def score_models(
     X: pd.DataFrame,
     y: np.typing.NDArray,  # pyright: ignore[reportMissingTypeArgument,reportUnknownMemberType,reportUnknownParameterType]
 ) -> tuple[float, float, float, float]:
+    """Calculate classification metrics for a fitted model.
+
+    Args:
+        model: Fitted scikit-learn pipeline used to make predictions.
+        X: Feature DataFrame to evaluate.
+        y: True labels corresponding to ``X``.
+
+    Returns:
+        F1, precision, recall, and balanced accuracy scores, in that order.
+    """
     y_pred: np.typing.NDArray = model.predict(
         X
     )  # pyright: ignore[reportUnknownMemberType,reportMissingTypeArgument,reportUnknownVariableType]

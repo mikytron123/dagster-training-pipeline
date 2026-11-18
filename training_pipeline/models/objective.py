@@ -26,13 +26,34 @@ class Objective(ABC):
 
     @abstractmethod
     def create_pipeline(self) -> Pipeline:
+        """Create the preprocessing and estimator pipeline for the model.
+
+        Returns:
+            An unfitted scikit-learn pipeline.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def __call__(self, trial: opt.trial.Trial) -> float:
+        """Evaluate one Optuna trial.
+
+        Args:
+            trial: Optuna trial containing the suggested hyperparameters.
+
+        Returns:
+            The cross-validated balanced accuracy for the trial.
+        """
         raise NotImplementedError
 
     def train_model(self, params: Mapping[str, int | str | float]) -> float:
+        """Evaluate model parameters using stratified cross-validation.
+
+        Args:
+            params: Pipeline parameters to apply before evaluation.
+
+        Returns:
+            The mean cross-validated balanced accuracy.
+        """
         pipeline = self.create_pipeline()
         pipeline.set_params(**params)
 
@@ -50,6 +71,11 @@ class Objective(ABC):
 class SVCObjective(Objective):
     @override
     def create_pipeline(self) -> Pipeline:
+        """Build an SVC pipeline with scaled numeric and encoded categorical features.
+
+        Returns:
+            An unfitted preprocessing and SVC pipeline.
+        """
         categorical_features = self.data_type["categorical_features"]
         numeric_features = self.data_type["numeric_features"]
 
@@ -73,6 +99,14 @@ class SVCObjective(Objective):
 
     @override
     def __call__(self, trial: opt.trial.Trial) -> float:
+        """Suggest SVC hyperparameters and evaluate the resulting pipeline.
+
+        Args:
+            trial: Optuna trial used to suggest the kernel and regularization.
+
+        Returns:
+            The cross-validated balanced accuracy for the trial.
+        """
         with mlflow.start_run(nested=True):
             # Define hyperparameters
             params = {
@@ -90,6 +124,11 @@ class SVCObjective(Objective):
 class DecisionTreeObjective(Objective):
     @override
     def create_pipeline(self) -> Pipeline:
+        """Build a decision tree pipeline with encoded categorical features.
+
+        Returns:
+            An unfitted preprocessing and decision tree pipeline.
+        """
         categorical_features = self.data_type["categorical_features"]
 
         categorical_transformer = OneHotEncoder(
@@ -112,6 +151,14 @@ class DecisionTreeObjective(Objective):
 
     @override
     def __call__(self, trial: opt.trial.Trial) -> float:
+        """Suggest decision tree hyperparameters and evaluate the pipeline.
+
+        Args:
+            trial: Optuna trial used to suggest tree depth and split sizes.
+
+        Returns:
+            The cross-validated balanced accuracy for the trial.
+        """
         with mlflow.start_run(nested=True):
             # Define hyperparameters
             params = {

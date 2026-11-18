@@ -18,6 +18,7 @@ if MLFLOW_PORT is None:
 
 
 def setup_mlflow():
+    """Configure MLflow tracking for the training experiment."""
     mlflow.set_tracking_uri(uri=f"http://{MLFLOW_HOST}:{MLFLOW_PORT}")
 
     mlflow.set_experiment(experiment_name="Training")
@@ -25,7 +26,12 @@ def setup_mlflow():
 
 @multi_asset(outs={"df": AssetOut(key="df"), "data_type": AssetOut(key="data_type")})
 def load_data() -> tuple[pd.DataFrame, dict]:
-    """ """
+    """Load the Adult dataset and describe its feature types.
+
+    Returns:
+        A tuple containing the combined feature and label DataFrame, and a
+        mapping of numeric and categorical feature names.
+    """
     X, y = fetch_openml(data_id=179, return_X_y=True)
     df = pd.concat([X, y], axis="columns")
     print(df.shape)
@@ -56,7 +62,15 @@ def load_data() -> tuple[pd.DataFrame, dict]:
 def preprocess(
     df: pd.DataFrame, data_type: dict[str, list[str]]
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """ """
+    """Remove incomplete rows and separate features from the target.
+
+    Args:
+        df: DataFrame containing the source data and target column.
+        data_type: Mapping of numeric and categorical feature names.
+
+    Returns:
+        A tuple containing the feature DataFrame and target DataFrame.
+    """
 
     categorical_features = data_type["categorical_features"]
     numeric_features = data_type["numeric_features"]
@@ -81,7 +95,15 @@ def preprocess(
 def train_test_splitter(
     X: pd.DataFrame, y: pd.DataFrame
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """ """
+    """Encode the target and split features and labels into training and test sets.
+
+    Args:
+        X: Feature DataFrame.
+        y: Target DataFrame containing the ``class`` column.
+
+    Returns:
+        Training features, test features, training labels, and test labels.
+    """
 
     lbl = LabelBinarizer()
     y_vec = lbl.fit_transform(y["class"]).ravel()
@@ -112,6 +134,15 @@ def svm_optuna(
     y_test: pd.DataFrame,
     data_type: dict[str, list[str]],
 ):
+    """Optimize and evaluate an SVC model, logging results to MLflow.
+
+    Args:
+        X_train: Training features.
+        X_test: Test features used for final evaluation.
+        y_train: Training labels.
+        y_test: Test labels.
+        data_type: Mapping of numeric and categorical feature names.
+    """
     setup_mlflow()
     y_test_vec = y_test[y_test.columns[0]].to_numpy()
     y_train_vec = y_train[y_train.columns[0]].to_numpy()
@@ -173,6 +204,15 @@ def decision_tree_optuna(
     y_test: pd.DataFrame,
     data_type: dict[str, list[str]],
 ):
+    """Optimize and evaluate a decision tree model, logging results to MLflow.
+
+    Args:
+        X_train: Training features.
+        X_test: Test features used for final evaluation.
+        y_train: Training labels.
+        y_test: Test labels.
+        data_type: Mapping of numeric and categorical feature names.
+    """
     setup_mlflow()
     mlflow.sklearn.autolog(disable=True)
     y_test_vec = y_test[y_test.columns[0]].to_numpy()
@@ -220,6 +260,7 @@ def decision_tree_optuna(
 
 @asset(deps=[svm_optuna, decision_tree_optuna])
 def register_best_model():
+    """Register the logged model with the highest test balanced accuracy."""
     setup_mlflow()
     exp = mlflow.get_experiment_by_name("Training")
     models = mlflow.search_logged_models(
